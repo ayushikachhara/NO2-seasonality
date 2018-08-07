@@ -165,6 +165,39 @@ master.no2$Month_f<-  factor(master.no2$Month,
 monthwise.list <- split(master.no2, master.no2$Month_f)
 #monthwise.list <- split(master.roadside, master.roadside$Month_f)
 
+###### monthwise plots for regression ######
+ref.sites <- split(master.no2, master.no2$SiteType)
+p <- list()
+q.table <- list()
+k <- 1
+for (site in 1:length(ref.sites)) {
+  master.cur <- ref.sites[[site]]
+  monthwise.list <- split(master.cur,master.cur$Month_f)
+  for(i in 1:length(monthwise.list)){
+    temp.month <- monthwise.list[[i]]
+    # temp.month <- temp.month[which(temp.month$rollmean.no2<32),]
+    current.month <- temp.month$Month[i]
+    current.site <- as.character(temp.month$SiteType[1])
+    
+    p2 <- ggplotRegression2(lm(rollmean.no2.corr ~ (0+no2), data = temp.month),
+                            as.character(temp.month$Month_f[1]), current.site)
+    
+    x <- lm(rollmean.no2.corr ~ (0+no2), data = temp.month)
+    fit <- cbind.data.frame(Month_f = as.character(temp.month$Month_f[1]),
+                            Slope = signif(x$coef[[1]], 3),
+                            Rsq = signif(summary(x)$adj.r.squared, 3),
+                            Site.ID = as.character(temp.month$SiteType[1]))
+    q.table[[k]] <- fit
+    
+    
+    p[[k]] <- p2
+    
+    k <- k+1
+    
+  }
+}
+
+seasonal.factor <- rbindlist(q.table)
 
 # PDFfile <- paste0(path,"monthwise_CubicSpline_regressions2007to2016_intercept.pdf")
 # pdf(file=PDFfile, paper = "USr", width = 20)
