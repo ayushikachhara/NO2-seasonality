@@ -32,7 +32,10 @@ ggplotRegression2 <- function(fit, current.month, current.site) {
 path <- "/Users/ayushikachhara/Desktop/NIWA/NO2_seasonality/NZTA NO2 seasonality/NO2-seasonality/"
 setwd(path)
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> 79e8346b8cf4804b46536f1269af2eda504f589d
 refraw <- read.csv("ref_site_raw.csv", stringsAsFactors = F)
 refraw$Time <- ifelse(refraw$Time == "24:00:00", "00:00", refraw$Time)
 refraw$DateTime <-dmy_hm(paste(refraw$Date, refraw$Time))
@@ -112,11 +115,19 @@ ref.sites <- split(master.no2, master.no2$Site.ID)
 p <- list()
 q.table <- list()
 k <- 1
+<<<<<<< HEAD
 numbers <- c(1,3:11)
 for (site in numbers) {
   master.cur <- ref.sites[[site]]
   monthwise.list <- split(master.cur,master.cur$Month)
   plot(master.cur$no2, type = "l")
+=======
+
+numbers <- c(1,3:11)
+for (site in numbers) {
+  master.cur <- ref.sites[[site]]
+  monthwise.list <- split(master.cur,master.cur$Month_f)
+>>>>>>> 79e8346b8cf4804b46536f1269af2eda504f589d
   for(i in 1:length(monthwise.list)){
     temp.month <- monthwise.list[[i]]
     # temp.month <- temp.month[which(temp.month$rollmean.no2<32),]
@@ -142,13 +153,18 @@ for (site in numbers) {
 }
 
 seasonal.factor <- rbindlist(q.table)
+<<<<<<< HEAD
 # write.csv(seasonal.factor, "seasonaladjustment_NZTA_SiteType.csv")
+=======
+
+>>>>>>> 79e8346b8cf4804b46536f1269af2eda504f589d
 # PDFfile <- paste0(path,"seasonal_adjustmentsALLSITES_longterm.pdf")
 # pdf(file=PDFfile, paper = "USr", width = 20)
 # for( i in 1:length(p)) {
 #   print(p[[i]])
 # }
 # dev.off()
+<<<<<<< HEAD
 ann.average <- aggregate(refmonthly1$no2, 
                          by = list(refmonthly1$Site.ID,refmonthly1$Year),
                          FUN = function(x) mean(x, na.rm = T))
@@ -181,6 +197,31 @@ ggplot() +
   geom_line(data=seasonal.table[which(seasonal.table$cat2 == "Motorway"),], 
             aes(x=Month_f, y= Slope, group = Site.ID, color = Site.ID), size = 1) + 
   theme_bw() +  ggtitle("Motorway Sites") +
+=======
+
+
+refsiteseasonal <- read.csv("seasonaladjustment_RefSites.csv")
+NZTAseasonal <- read.csv("seasonaladjustment3.csv")
+allrefseasonal <- read.csv("refsite_seasonaladjustment_longterm.csv")
+
+seasonal.table <- rbind(refsiteseasonal,allrefseasonal, NZTAseasonal)
+seasonal.table$Month_f <- factor(seasonal.table$Month_f, levels = c("Jan" ,"Feb" ,"Mar", "Apr", "May", "Jun", "Jul",
+                                                                    "Aug", "Sep", "Oct", "Nov", "Dec"))
+
+seasonal.table$cat <- ifelse(seasonal.table$Site.ID == "NZTA", "NZTA", NA)
+
+ggplot(seasonal.table, aes(Month_f, Slope)) +
+  geom_point(aes(color = Site.ID)) +
+  geom_line(aes(group = cat), color = "blue") +
+  theme_bw() 
+
+ggplot() + 
+  geom_line(data=seasonal.table, 
+            aes(x=Month_f, y=Slope, group = Site.ID, color = Site.ID)) + 
+  geom_line(data=seasonal.table[which(seasonal.table$Site.ID == "NZTA"),], 
+            aes(x=Month_f, y=Slope, group = 1), 
+            color='black', size = 1.5) + theme_bw() + 
+>>>>>>> 79e8346b8cf4804b46536f1269af2eda504f589d
   theme(legend.text = element_text(size = 16),
         title = element_text(size = 16),
         legend.title = element_blank(),
@@ -234,7 +275,10 @@ months <- c("Jan" ,"Feb" ,"Mar", "Apr", "May", "Jun", "Jul",
 
 all.tables.list <- list()
 k = 1
+<<<<<<< HEAD
 
+=======
+>>>>>>> 79e8346b8cf4804b46536f1269af2eda504f589d
 for(i in 1:length(listofsites)) {
   fileName <- listofsites[[i]]
   yearwise <- split(fileName, fileName$Year)
@@ -545,4 +589,8 @@ proc10 <- as.matrix(proc10)
 
 
 ###### checking models: ####
+<<<<<<< HEAD
+=======
+write.csv(refmonthly)
+>>>>>>> 79e8346b8cf4804b46536f1269af2eda504f589d
 ## 
