@@ -75,7 +75,9 @@ f3 <- f3[order(f3$start.month),]
 f3$mod.NO2 <- ifelse(!is.na(f3$obs.NO2), f3$no2, f3$calc.ann/f3$seasonal.factor)
 f3 <- f3[,-5]
 
-f3$available.monthsfac <- factor(round(f3$available.months/2)*2)
+# f4 <- f3[which(f3$available.months == 1),]
+
+# f3 <- f4
 # ggplot(f3[which(!is.na(f3$no2)),]) +
 #   geom_point(aes(no2,mod.NO2, color = available.monthsfac), size = 1) +
 #   scale_colour_brewer(palette = "Blues") +
@@ -101,22 +103,22 @@ d1 <- cbind.data.frame(Site.ID = f3$Site.ID, Year = f3$Year,
 d1$sd <- d1$calc.no2 - d1$obs.no2
 d1$key <- ifelse(d1$sd == 0, "Available", "Missing")
 
-d2 <- dcast(d1, formula= Site.ID + Year + Month + start.month + obs.no2 ~ available.months,
+d2 <- dcast(d1, formula= Site.ID + Year + Month  + obs.no2 ~ available.months + start.month,
                value.var = 'calc.no2',
                fun.aggregate = function(x) mean(x, na.rm =T))
 
 
-d3 <- d1 %>% group_by(Site.ID,  available.months, Month) %>%
+d3 <- d1 %>% group_by(Site.ID,  available.months, Month, start.month) %>%
   dplyr::summarise(obs.no2 = mean(obs.no2, na.rm = T),
                    calc.no2 = mean(calc.no2, na.rm = T),
                    est.sd = sd(sd,na.rm = T))
 
 ggplot(d3) +
   geom_point(aes(x =obs.no2, y = est.sd, 
-                 color = as.factor( available.months)), size = 2) +theme_bw()
+                 color = Month), size = 2) +theme_bw()
 
 ### error in the whole dataset as a function of available months and start month
-d4 <- d1 %>% group_by(available.months, start.month) %>%
+d4 <- d1 %>% group_by(available.months, start.month, Month) %>%
   dplyr::summarise(obs.no2 = mean(obs.no2, na.rm = T),
                    calc.no2 = mean(calc.no2, na.rm = T),
                    est.sd = sd(sd,na.rm = T))
@@ -125,7 +127,7 @@ d4$start.month <- factor(d4$start.month, levels = c("Jan" ,"Feb" ,"Mar", "Apr", 
                                                           "Aug", "Sep", "Oct", "Nov", "Dec"))
 
 ggplot(d4) +
-  geom_point(aes(x = available.months, y = est.sd, color = as.factor(start.month)), size = 2) +
+  geom_point(aes(x = available.months, y = est.sd, size = as.factor(start.month))) +
   theme_bw() +
   ggtitle("Std Deviation in estimating monthly NO2 based on modelled annual means")
 
@@ -144,27 +146,30 @@ d1$rnd.obsmean <- round(d1$obs.no2/2,0)*2
 
 ### standard deviation as a function of observed annual mean (bands of 2 ug/m3) ####
 
-d7 <- dcast(d1, formula= rnd.obsmean ~ available.months,
+d7 <- dcast(d1, formula= rnd.obsmean ~ available.months+start.month,
                value.var = 'norm.sd',
                fun.aggregate = sd)
 
-colnames(d7) <- c("rnd.obsmean", "avbl1", "avbl2","avbl3","avbl4",
-                     "avbl5","avbl6","avbl7","avbl8","avbl9","avbl10","avbl11")
+# colnames(d7) <- c("rnd.obsmean", "avbl1", "avbl2","avbl3","avbl4",
+#                      "avbl5","avbl6","avbl7","avbl8","avbl9","avbl10","avbl11")
 
 
 fit.values <- cbind.data.frame(available.months = NA,
+                               start.month = NA,
                                mean = NA,
                                slope = NA,
                                intercept = NA,
                                rsq = NA)
-for(i in 2:12){
+# i <- 2  
+for(i in 2:133){
   mean <- mean(d7[,i])
   fit <- lm(d7[,i]~d7[,1], data = d7)
   intercept <- fit$coefficients[[1]]
   slope <- fit$coefficients[[2]]
   rsq <- summary(fit)$adj.r.squared
   
-  fit.table <- cbind.data.frame(available.months = (i-1),
+  fit.table <- cbind.data.frame(available.months = strsplit(colnames(d7)[i], "_")[[1]][1],
+                                start.month = strsplit(colnames(d7)[i], "_")[[1]][2],
                                 mean = mean,
                                 slope = slope,
                                 intercept = intercept,
@@ -176,46 +181,59 @@ for(i in 2:12){
 }
 fit.values <- fit.values[-1,]
 
+
+
 plot(fit.values$available.months, fit.values$rsq, type = "l")
 
 
 ggplot(data = d7) +
-  geom_line(aes(rnd.obsmean, avbl1, colour = "1"))+
-  geom_line(aes(rnd.obsmean, avbl2, colour = "2"))+
-  geom_line(aes(rnd.obsmean, avbl3, colour = "3"))+
-  geom_line(aes(rnd.obsmean, avbl4, colour = "4"))+
-  geom_line(aes(rnd.obsmean, avbl5, colour = "5"))+
-  geom_line(aes(rnd.obsmean, avbl6, colour = "6"))+
-  geom_line(aes(rnd.obsmean, avbl7, colour = "7"))+
-  geom_line(aes(rnd.obsmean, avbl8, colour = "8"))+
-  geom_line(aes(rnd.obsmean, avbl9, colour = "9"))+
-  geom_line(aes(rnd.obsmean, avbl10, colour = "10"))+
-  geom_line(aes(rnd.obsmean, avbl11, colour = "11"))
+  geom_line(aes(rnd.obsmean, `1_Jan`)) +
+  geom_line(aes(rnd.obsmean, `2_Jan`)) +
+  geom_line(aes(rnd.obsmean, `3_Jan`)) +
+  geom_line(aes(rnd.obsmean, `4_Jan`)) +
+  geom_line(aes(rnd.obsmean, `5_Jan`)) +
+  geom_line(aes(rnd.obsmean, `6_Jan`)) +
+  geom_line(aes(rnd.obsmean, `7_Jan`)) +
+  geom_line(aes(rnd.obsmean, `8_Jan`)) +
+  geom_line(aes(rnd.obsmean, `9_Jan`))
+  
 
 
 #### normalised standard deviation as a function of start month: ####
 
-d8 <- dcast(d1, formula= start.month ~ available.months,
+d8 <- dcast(d1, formula= start.month ~ available.months+Month,
                value.var = 'norm.sd',
                fun.aggregate = sd)
 
-colnames(d8) <- c("start.month", "avbl1", "avbl2","avbl3","avbl4",
-                     "avbl5","avbl6","avbl7","avbl8","avbl9","avbl10","avbl11")
+# colnames(d8)[3:13] <- c("avbl1", "avbl2","avbl3","avbl4",
+#                      "avbl5","avbl6","avbl7","avbl8","avbl9","avbl10","avbl11")
 
+d9 <- gather(d8, seq,sd, `1_Jan`:`11_Dec`, factor_key = T)
+
+d9$seq <- as.character(d9$seq)
+d9$available.months <- strsplit(d9$seq, "_")
+d9$Month <- unlist(strsplit(d9$seq, "_"))[2]
+d9 <- d9[which(d9$sd != 0),]
+
+ggplot(d9) +
+  geom_tile(aes(start.month,Month, fill = sd)) +
+  theme(axis.text = element_text(angle = 0, size = 6))
 
 fit.values2 <- cbind.data.frame(available.months = NA,
+                                Month = NA,
                                 mean = NA,
                                 slope = NA,
                                 intercept = NA,
                                 rsq = NA)
-for(i in 2:12){
+for(i in 2:133){
   mean <- mean(d8[,i], na.rm = T)
   fit <- lm(d8[,i]~d8[,1], data = d8)
   intercept <- fit$coefficients[[1]]
   slope <- fit$coefficients[[2]]
   rsq <- summary(fit)$adj.r.squared
   
-  fit.table <- cbind.data.frame(available.months = (i-1),
+  fit.table <- cbind.data.frame(available.months = strsplit(colnames(d7)[i], "_")[[1]][1],
+                                Month = strsplit(colnames(d7)[i], "_")[[1]][2],
                                 mean = mean,
                                 slope = slope,
                                 intercept = intercept,
@@ -227,7 +245,7 @@ for(i in 2:12){
 }
 fit.values2 <- fit.values2[-1,]
 
-plot(fit.values2$available.months, fit.values2$rsq, type = "l")
+plot(fit.values2$available.months, fit.values2$rsq)
 
 
 

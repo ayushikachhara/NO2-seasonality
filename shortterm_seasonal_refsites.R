@@ -1,3 +1,5 @@
+### ref work - finer scale seasonal adjustments ####
+
 library(ggplot2)
 library(dplyr)
 library(tidyr)
@@ -6,28 +8,6 @@ library(data.table)
 library(plotly)
 library(gridExtra)
 library(zoo)
-
-
-ggplotRegression2 <- function(fit, current.month, current.site) {
-  ggplot(fit$model, aes_string(x = names(fit$model)[2], y = names(fit$model)[1])) + 
-    geom_point() +
-    stat_smooth(method = "lm", formula = y~0 + x, col = "red", fullrange = F) + theme_bw()+
-    scale_x_continuous(limits = c(0,60), 
-                       breaks = c(0,10,20,30,40,50,60)) +
-    scale_y_continuous(limits = c(0,60), 
-                       breaks = c(0,10,20,30,40,50,60)) +
-    ggtitle(paste(current.month, " -- NO2 seasonality for", current.site)) + 
-    annotate("text",
-             x = 40, y = 10,
-             label = (paste0("Adj R2 = ",signif(summary(fit)$adj.r.squared, 3),
-                             "\ny = ",signif(fit$coef[[1]], 3), "x + 0"))) +
-    xlab(paste(current.month,"NO2 / mg m-3")) + 
-    ylab("12 month rolling mean NO2 / mg m-3") +
-    theme(axis.title = element_text(size = 16), 
-          axis.text = element_text(size = 12),
-          title = element_text(size = 16))
-}
-
 
 path <- "/Users/ayushikachhara/Desktop/NIWA/NO2_seasonality/NZTA NO2 seasonality/NO2-seasonality/"
 setwd(path)
@@ -50,145 +30,51 @@ refmonthly <- refmonthly[order(refmonthly$Year, refmonthly$Month),]
 refmonthly <- refmonthly[-1,]
 
 refmonthly1 <- gather(refmonthly,Site.ID, no2,AC_Glen:AC_Whang, factor_key=TRUE)
+refmonthly1 <- refmonthly1[which(refmonthly1$Year >=2007 &
+                                   refmonthly1$Year <= 2016),]
 
-#### split sitewise for rollmeans calculation #######  
-no2.list <- split(refmonthly1,refmonthly1$Site.ID)
-na.countpersite <- data.frame(site.ID = NA, count.na = NA)
-
-for(i in 1: length(no2.list)) {
-  no2.df <- no2.list[[i]]
-  
-  if(nrow(no2.df) <=12) {
-    
-    print(paste(no2.df$Site.ID[1], "dataframe too small"))
-    
-    no2.df <- no2.df[order(no2.df$Year),]
-    no2.df$count.na <- NA
-    no2.df$rollmean.no2 <- NA
-    no2.df$rollmean.no2.corr <- NA
-    
-  } else {
-    
-    no2.df <- no2.df[order(no2.df$Year),]
-    
-    no2.df$count.na <- rollapply(no2.df$no2, width=12, 
-                                 FUN=function(x) length(x[is.na(x)]), align='right', fill = NA)
-    
-    no2.df$rollmean.no2 <- rollapply(no2.df$no2, width=12, 
-                                     FUN=function(x) mean(x, na.rm=TRUE), fill=NA, align="right")
-    
-    no2.df$rollmean.no2.corr <- ifelse(no2.df$count.na>=2, NA, no2.df$rollmean.no2)
-    
-    # no2.df$cumsum.no2 <- cumsum(no2.df$no2)
-    
-    count.vector <- cbind.data.frame(site.ID = no2.df$Site.ID[1],
-                                     count.na = sum(is.na(no2.df$no2)))
-    na.countpersite <- rbind.data.frame(na.countpersite, count.vector)
-  }
-  no2.list[[i]] <- no2.df
-  
-  if(i == 1) {
-    master.no2 <- no2.df
-  } else {
-    master.no2 <- rbind(master.no2, no2.df)
-  }
-}
-
-months <- cbind.data.frame(Month = c(1:12),
-                           Month_f = c("Jan", "Feb", "Mar", 
-                                       "Apr" , "May", "Jun",
-                                       "Jul", "Aug", "Sep",
-                                       "Oct", "Nov", "Dec"))
-
-## factor conversion for calendar order ####
-master.no2 <- merge(master.no2, months, by = "Month", all = T)
-master.no2$Month_f<-  factor(master.no2$Month_f, 
-                             levels=c("Jan", "Feb", "Mar", 
-                                      "Apr" , "May", "Jun",
-                                      "Jul", "Aug", "Sep",
-                                      "Oct", "Nov", "Dec"))
-###### monthwise plots for regression ######
-ref.sites <- split(master.no2, master.no2$Site.ID)
-p <- list()
-q.table <- list()
-k <- 1
-numbers <- c(1,3:11)
-for (site in numbers) {
-  master.cur <- ref.sites[[site]]
-  monthwise.list <- split(master.cur,master.cur$Month)
-  plot(master.cur$no2, type = "l")
-  for(i in 1:length(monthwise.list)){
-    temp.month <- monthwise.list[[i]]
-    # temp.month <- temp.month[which(temp.month$rollmean.no2<32),]
-    current.month <- temp.month$Month[i]
-    current.site <- as.character(temp.month$Site.ID[1])
-    
-    p2 <- ggplotRegression2(lm(rollmean.no2.corr ~ (0+no2), data = temp.month),
-                            as.character(temp.month$Month_f[1]), current.site)
-    
-    x <- lm(rollmean.no2.corr ~ (0+no2), data = temp.month)
-    fit <- cbind.data.frame(Month_f = as.character(temp.month$Month_f[1]),
-                            Slope_refsite = signif(x$coef[[1]], 3),
-                            Rsq_refsite = signif(summary(x)$adj.r.squared, 3),
-                            Site.ID = as.character(temp.month$Site.ID[1]))
-    q.table[[k]] <- fit
-    
-    
-    p[[k]] <- p2
-    
-    k <- k+1
-    
-}
-}
-
-seasonal.factor <- rbindlist(q.table)
-# write.csv(seasonal.factor, "seasonaladjustment_NZTA_SiteType.csv")
-# PDFfile <- paste0(path,"seasonal_adjustmentsALLSITES_longterm.pdf")
-# pdf(file=PDFfile, paper = "USr", width = 20)
-# for( i in 1:length(p)) {
-#   print(p[[i]])
-# }
-# dev.off()
-ann.average <- aggregate(refmonthly1$no2, 
-                         by = list(refmonthly1$Site.ID,refmonthly1$Year),
+ann.average <- aggregate(refmonthly1$no2,
+                         by = list(refmonthly1$Site.ID, refmonthly1$Year),
                          FUN = function(x) mean(x, na.rm = T))
 
-ann.average <- ann.average[complete.cases(ann.average$x),]
+colnames(ann.average) <- c("Site.ID","Year","ann.no2")
+
+refmonthly1 <- merge(refmonthly1, ann.average, by = c("Site.ID","Year"), all = T)
+refmonthly1$seasonal.factor <- refmonthly1$ann.no2/refmonthly1$no2
+refmonthly1 <- refmonthly1[which(refmonthly1$Site.ID %in% c("AC_Penro",
+                                                            "AC_Taka",
+                                                            "AC_Queen",
+                                                            "AC_Hende",
+                                                            "AC_Khybe")),]
+refmonthly1 <- refmonthly1[complete.cases(refmonthly1$no2),]
+ref.sites <- split(refmonthly1, as.character(refmonthly1$Site.ID))
+
+#### plotting seasonal values
+for(i in 1:5) {
+  cur.site <- ref.sites[[i]]
+  
+  p1 <- ggplot(cur.site) +
+    geom_line(aes(Month, seasonal.factor, 
+                  color = factor(Year), group = factor(Year)), size = 1.5) +
+    geom_point(aes(Month, seasonal.factor)) +
+    ggtitle(paste(cur.site$Site.ID[1])) + theme_bw() +
+    scale_x_continuous(breaks = seq(1,12,1)) +
+    scale_y_continuous(breaks = seq(0,3,0.3))
+  
+  print(p1)
+  
+}
+months <- cbind.data.frame(Month_f = c(1:12),
+                           Month = c("Jan" ,"Feb" ,"Mar", "Apr", "May", "Jun", "Jul",
+                                       "Aug", "Sep", "Oct", "Nov", "Dec"))
+refpen <- ref.sites[[3]]
+seasonalrefs <- cbind.data.frame(Year = refpen$Year,
+                                 Month_f = refpen$Month,
+                                 seasonal.factor = refpen$seasonal.factor)
+seasonalrefs <- merge(seasonalrefs, months, by = "Month_f", all = T)
 
 
-refsiteseasonal <- read.csv("seasonaladjustment_RefSites.csv", stringsAsFactors = F)
-NZTAseasonal <- read.csv("seasonaladjustment3.csv", stringsAsFactors = F)
-allrefseasonal <- read.csv("refsite_seasonaladjustment_longterm.csv", stringsAsFactors = F)
-NZTASiteTypeSeasonal <- read.csv("seasonaladjustment_NZTA_SiteType.csv", stringsAsFactors = F)
-seasonal.table <- rbind(refsiteseasonal,allrefseasonal, 
-                        NZTAseasonal, NZTASiteTypeSeasonal)
-seasonal.table$Month_f <- factor(seasonal.table$Month_f, levels = c("Jan" ,"Feb" ,"Mar", "Apr", "May", "Jun", "Jul",
-                                                                    "Aug", "Sep", "Oct", "Nov", "Dec"))
-
-seasonal.table$cat <- ifelse(seasonal.table$Site.ID %in% c("NZTA", "Local", "Background", "SH"), 
-                             "NZTA", "Ref")
-
-seasonal.table$cat2 <- ifelse(seasonal.table$Site.ID %in% 
-                                c("SH", "AC_Penro", "AC_Taka"),
-                              "Motorway", "Other")
-seasonalNZTA <- seasonal.table[which(seasonal.table$cat == "NZTA"),]
-seasonalNZTA <- merge(seasonalNZTA, NZTAseasonal, by = "Month_f", all = T)
-
-seasonalNZTA$diff <- seasonalNZTA$Slope.x - seasonalNZTA$Slope.y
-
-
-ggplot() + 
-  geom_line(data=seasonal.table[which(seasonal.table$cat2 == "Motorway"),], 
-            aes(x=Month_f, y= Slope, group = Site.ID, color = Site.ID), size = 1) + 
-  theme_bw() +  ggtitle("Motorway Sites") +
-  theme(legend.text = element_text(size = 16),
-        title = element_text(size = 16),
-        legend.title = element_blank(),
-        axis.text = element_text(size = 16),
-        axis.title = element_text(size = 16),
-        plot.margin = margin(2, 2, 2, 2, "cm"))
-
-###seasonal adjustment####
+#### seasonal.adjustment hole-patch algorithm: ####
 
 ### function definition: ####
 vecrm <- function(rm, month) {
@@ -207,11 +93,13 @@ vecrm <- function(rm, month) {
   return(f7)
 }
 
-## Step 1: find sites with full year records and also the year.
-
 no2.file <- read.csv("nationalNO2_2007to2016.csv")
 # seasonal.factor <- read.csv("seasonaladjustment_penrose.csv")
-seasonal.factor <- seasonal.factor[,c(1:3)]
+seasonal.factor <- seasonalrefs[,c(4,2,3)]
+seasonal.factor$Month <- factor(seasonal.factor$Month,
+                                levels = c("Jan" ,"Feb" ,"Mar", "Apr", "May", "Jun", "Jul",
+                                           "Aug", "Sep", "Oct", "Nov", "Dec"))
+colnames(seasonal.factor) <- c("Month_f","Year","Slope_refsite")
 ## remove all rows with NAs in it. We can do this since every row represents one year. 
 ## If a rolling mean is needed in the future, this will have to be replaced by a more sophisticated approach.
 
@@ -238,18 +126,18 @@ k = 1
 for(i in 1:length(listofsites)) {
   fileName <- listofsites[[i]]
   yearwise <- split(fileName, fileName$Year)
-
+  
   for(year in 1: length(yearwise)){
     f1 <- yearwise[[year]]
     f2 <- melt(f1[,c(3:14)], id.vars = NULL)
     f2$Year <- rep(f1$Year, 12)
     colnames(f2) <- c("Month_f","NO2", "Year")
-    f2 <- merge(f2,seasonal.factor, by = "Month_f")
+    f2 <- merge(f2,seasonal.factor, by = c("Month_f", "Year"), all.x = T)
     f2$Month_f <- factor(f2$Month_f,
                          levels =c("Jan" ,"Feb" ,"Mar", "Apr", "May", "Jun", "Jul",
                                    "Aug", "Sep", "Oct", "Nov", "Dec"))
     f2 <- f2[order(f2$Month_f),]
-
+    
     for(i in 1:12) {
       for(j in 0:10){
         f3 <- vecrm(j,i)
@@ -263,17 +151,13 @@ for(i in 1:length(listofsites)) {
 }
 
 all.table <- rbindlist(all.tables.list)
-# all.table1 <- all.table[complete.cases(all.table),]
-# save(all.table,file = "holepatchprocessed_refsite.RData")
 
-# load("holepatchprocessed.RData")
 
-## keep only the distinct rows
 proc <- all.table %>% distinct(Site.ID,Year,no.holes, start.hole, calc.ann, .keep_all = TRUE)
 
 seasonal.factor$Month_f <- as.character(seasonal.factor$Month_f)
 proc <- proc[,c(10,2,6,7,8,9)]
-proc <- merge(proc,seasonal.factor, by.x = "start.month", by.y = "Month_f", all = T)
+# proc <- merge(proc,seasonal.factor, by.x = "start.month", by.y = "Month_f", all = T)
 
 proc$start.month <- factor(proc$start.month, levels = c("Jan" ,"Feb" ,"Mar", "Apr", "May", "Jun", "Jul",
                                                         "Aug", "Sep", "Oct", "Nov", "Dec"))
@@ -288,7 +172,7 @@ proc2$sd <- proc2$calc.ann - proc2$obs.ann
 
 proc3 <- dcast(proc2, formula= Site.ID + Year + start.month + obs.ann ~ available.months,
                value.var = 'calc.ann',
-               fun.aggregate = mean)
+               fun.aggregate = function(x) mean(x, na.rm = T))
 
 
 proc4 <- proc2 %>% group_by(Site.ID,  available.months) %>%
@@ -297,7 +181,8 @@ proc4 <- proc2 %>% group_by(Site.ID,  available.months) %>%
                    est.sd = sd(sd,na.rm = T))
 
 ggplot(proc4[which(proc4$ available.months == 1),]) +
-  geom_point(aes(x =obs.ann, y = est.sd, color = as.factor( available.months)), size = 3) +theme_bw()
+  geom_point(aes(x =obs.ann, y = est.sd, 
+                 color = as.factor( available.months)), size = 3) +theme_bw()
 
 
 proc5 <- proc2 %>% group_by( available.months, start.month) %>%
@@ -314,17 +199,20 @@ ggplot(proc5) +
   theme_bw() +
   ggtitle("Stadard Deviation associated with estimating the annual mean \nbased on number of holes in the data")
 
+
+p1 <- proc2[which(proc2$available.months == 9),]
+p2 <- p1[which(p1$start.month != "Jan"),]
+p2 <- p2[which(p2$start.month != "Feb"),]
+p2 <- p2[which(p2$start.month != "Mar"),]
+
+x <- lm(calc.ann~obs.ann, data =p2)
+
+summary(x)
+
 ggplot(p2) +
   geom_point(aes(y = calc.ann, x = obs.ann), size = 1) +
   geom_smooth(aes(y = calc.ann, x = obs.ann), color = "red", method = "lm") +
   theme_bw()
-
-
-p1 <- proc2[which(proc2$available.months == 1),]
-p2 <- p1[which(p1$start.month == "Feb"),]
-x <- lm(calc.ann~obs.ann, data =p2 )
-
-summary(x)
 
 #### working with proc2 ####
 proc2$start.date <- paste0(proc2$Year,"-",proc2$start.month,"-01")
@@ -342,7 +230,7 @@ proc2$rnd.obsmean <- round(proc2$obs.ann/2,0)*2
 
 proc7 <- dcast(proc2, formula= rnd.obsmean ~ available.months,
                value.var = 'norm.sd',
-               fun.aggregate = sd)
+               fun.aggregate =  function(x) sd(x, na.rm = T))
 
 colnames(proc7) <- c("rnd.obsmean", "avbl1", "avbl2","avbl3","avbl4",
                      "avbl5","avbl6","avbl7","avbl8","avbl9","avbl10","avbl11")
@@ -354,7 +242,7 @@ fit.values <- cbind.data.frame(available.months = NA,
                                intercept = NA,
                                rsq = NA)
 for(i in 2:12){
-  mean <- mean(proc7[,i])
+  mean <- mean(proc7[,i], na.rm = T)
   fit <- lm(proc7[,i]~proc7[,1], data = proc7)
   intercept <- fit$coefficients[[1]]
   slope <- fit$coefficients[[2]]
@@ -393,7 +281,7 @@ ggplot(data = proc7) +
 
 proc8 <- dcast(proc2, formula= start.month ~ available.months,
                value.var = 'norm.sd',
-               fun.aggregate = sd)
+               fun.aggregate =  function(x) sd(x, na.rm = T))
 
 colnames(proc8) <- c("start.month", "avbl1", "avbl2","avbl3","avbl4",
                      "avbl5","avbl6","avbl7","avbl8","avbl9","avbl10","avbl11")
@@ -405,7 +293,7 @@ fit.values2 <- cbind.data.frame(available.months = NA,
                                 intercept = NA,
                                 rsq = NA)
 for(i in 2:12){
-  mean <- mean(proc8[,i])
+  mean <- mean(proc8[,i], na.rm = T)
   fit <- lm(proc8[,i]~proc8[,1], data = proc8)
   intercept <- fit$coefficients[[1]]
   slope <- fit$coefficients[[2]]
@@ -508,18 +396,18 @@ proc9 <- gather(proc8, start.month, norm.sd, avbl1:avbl11, factor_key=TRUE)
 colnames(proc9) <- c("start.month","available.months","norm.sd")
 proc9$available.months <- rep(1:11, each = 12)
 
-proc9$norm.sd <- ifelse(proc9$norm.sd>0.2, 0.2, proc9$norm.sd)
+# proc9$norm.sd <- ifelse(proc9$norm.sd>0.2, 0.2, proc9$norm.sd)
 
 proc9$norm.sdfac <- factor(round((proc9$norm.sd/2),2)*2)
 N <- nlevels(proc9$norm.sdfac)
-colors <- colorRampPalette(c("yellow", "darkgreen"))(10)
+colors <- colorRampPalette(c("yellow", "darkgreen"))(11)
 
 ggplot(proc9, aes(start.month,available.months,fill = norm.sdfac, z = norm.sdfac)) +
   geom_tile() +
   scale_fill_manual(values=colors, breaks=levels(proc9$norm.sdfac)[seq(1, N, by=1)]) +
   scale_y_continuous(breaks = seq(0,11,1), name = "Number of available monthly records") +
   scale_x_discrete(name = "Starting month of monitoring") +
-  ggtitle("Based on reference site: Takapuna") +
+  ggtitle("Based on reference site: Queen Street (month/year)") +
   theme_void() +
   theme(legend.text = element_text(size = 16),
         title = element_text(size = 16),
@@ -532,7 +420,7 @@ library(plotly)
 proc10 <- spread(proc9[,1:3],key = start.month, value = norm.sd)
 proc10 <- proc10[,-1]
 proc10 <- as.matrix(proc10)
-# 
+
 # plot_ly(z = ~proc10) %>% add_contour(colors = colors)
 # plot_ly(z = ~proc10) %>% add_surface(colors = colors)
 # 
@@ -542,7 +430,6 @@ proc10 <- as.matrix(proc10)
 # write.csv(proc4, "Takapuna_refsite_model_persite.csv")
 # write.csv(seasonal.factor,"seasonaladjustment_Takapuna.csv")
 
+# write.csv(proc, "holepatch_annual_Queen.csv")
+# write.csv(proc9, "holepatch_ann_mosaic_Queen.csv")
 
-
-###### checking models: ####
-## 
